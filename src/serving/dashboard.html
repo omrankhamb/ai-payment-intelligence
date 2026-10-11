@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FraudGraph | Real-Time AI Payment Prevention</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    @keyframes pulse-glow {
+      0%, 100% { opacity: 0.8; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.03); }
+    }
+    .glow-approve { box-shadow: 0 0 25px rgba(16, 185, 129, 0.4); }
+    .glow-flag { box-shadow: 0 0 25px rgba(245, 158, 11, 0.4); }
+    .glow-decline { box-shadow: 0 0 25px rgba(239, 68, 68, 0.4); }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased">
+  <!-- Top Navigation -->
+  <header class="border-b border-slate-800 bg-slate-900/60 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-cyan-400 flex items-center justify-center text-white shadow-lg shadow-indigo-500/30">
+          <i class="fa-solid fa-shield-halved text-xl"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent">FraudGraph</h1>
+          <p class="text-xs text-slate-400">Hybrid GNN Real-Time Payment Intelligence</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-4">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <span class="h-2 w-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Engine Live (<span id="engineLatency">2.1ms</span>)
+        </span>
+        <a href="/docs" target="_blank" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+          <i class="fa-solid fa-code mr-1"></i> Swagger Docs
+        </a>
+        <a href="/metrics" target="_blank" class="text-xs bg-slate-800 hover:bg-slate-700 px-3 py-1.5 rounded-lg border border-slate-700 transition">
+          <i class="fa-solid fa-chart-line mr-1"></i> Prometheus
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <main class="max-w-7xl mx-auto px-4 py-8">
+    <!-- Presets Bar -->
+    <div class="mb-8 bg-slate-900/80 border border-slate-800 rounded-2xl p-4">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">
+          <i class="fa-solid fa-wand-magic-sparkles mr-1 text-indigo-400"></i> Click a Scenario to Test Live Demo:
+        </span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <button onclick="loadScenario('good')" class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/60 hover:bg-emerald-950/40 border border-slate-700 hover:border-emerald-500/50 transition text-left group">
+          <div class="h-9 w-9 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold text-sm">
+            <i class="fa-solid fa-check"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white group-hover:text-emerald-300">1. Normal Purchase ($45)</div>
+            <div class="text-xs text-slate-400">Trusted card, zero dispute history</div>
+          </div>
+        </button>
+
+        <button onclick="loadScenario('flag')" class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/60 hover:bg-amber-950/40 border border-slate-700 hover:border-amber-500/50 transition text-left group">
+          <div class="h-9 w-9 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center font-bold text-sm">
+            <i class="fa-solid fa-triangle-exclamation"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white group-hover:text-amber-300">2. Shared Device ($380)</div>
+            <div class="text-xs text-slate-400">Device linked with prior fraud</div>
+          </div>
+        </button>
+
+        <button onclick="loadScenario('bad')" class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/60 hover:bg-rose-950/40 border border-slate-700 hover:border-rose-500/50 transition text-left group">
+          <div class="h-9 w-9 rounded-lg bg-rose-500/10 text-rose-400 flex items-center justify-center font-bold text-sm">
+            <i class="fa-solid fa-ban"></i>
+          </div>
+          <div>
+            <div class="text-sm font-semibold text-white group-hover:text-rose-300">3. Velocity Attack ($999)</div>
+            <div class="text-xs text-slate-400">Card testing burst within 5 mins</div>
+          </div>
+        </button>
+      </div>
+    </div>
+
+    <!-- Main Grid: Input Form vs Real-Time Output -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <!-- Left Column: Payment Input -->
+      <div class="lg:col-span-5 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
+        <h2 class="text-base font-semibold text-white mb-4 flex items-center justify-between">
+          <span><i class="fa-solid fa-credit-card mr-2 text-indigo-400"></i> Payment Transaction Payload</span>
+          <span class="text-xs font-mono text-slate-500">POST /score</span>
+        </h2>
+
+        <form id="scoreForm" onsubmit="event.preventDefault(); submitScore();" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Transaction ID</label>
+              <input type="number" id="txId" value="4000101" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" required>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Amount ($ USD)</label>
+              <input type="number" step="0.01" id="txAmt" value="45.00" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white font-semibold focus:outline-none focus:border-indigo-500" required>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Card ID (card1)</label>
+              <input type="text" id="card1" value="20005" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500" required>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Product Category</label>
+              <select id="productCd" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                <option value="W">W (Web Retail)</option>
+                <option value="C">C (Cross-Border Commerce)</option>
+                <option value="R">R (Digital Reload)</option>
+                <option value="H">H (High Risk Travel)</option>
+                <option value="S">S (Subscription)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Billing Region (addr1)</label>
+              <input type="number" id="addr1" value="315" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Card Network (card4)</label>
+              <select id="card4" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                <option value="visa">Visa</option>
+                <option value="mastercard">Mastercard</option>
+                <option value="discover">Discover</option>
+                <option value="american express">American Express</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Device Type</label>
+              <select id="deviceType" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+                <option value="desktop">Desktop PC</option>
+                <option value="mobile">Mobile</option>
+                <option value="tablet">Tablet</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-400 mb-1">Device Info</label>
+              <input type="text" id="deviceInfo" value="Windows" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+
+          <button type="submit" id="submitBtn" class="w-full mt-2 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3 px-4 rounded-xl shadow-lg shadow-indigo-500/25 transition duration-150 flex items-center justify-center gap-2">
+            <i class="fa-solid fa-bolt"></i>
+            <span>Evaluate Risk with Hybrid GNN</span>
+          </button>
+        </form>
+      </div>
+
+      <!-- Right Column: Live Scoring Result -->
+      <div class="lg:col-span-7 space-y-6">
+        <!-- Decision Card -->
+        <div id="resultCard" class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl transition-all duration-300">
+          <div class="flex items-center justify-between pb-4 border-b border-slate-800">
+            <div>
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Automated Decision</span>
+              <div id="decisionBadge" class="mt-1 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-lg font-black tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+                <i class="fa-solid fa-circle-check"></i>
+                <span id="decisionText">APPROVE</span>
+              </div>
+            </div>
+
+            <div class="text-right">
+              <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Inference Speed</span>
+              <div class="mt-1 text-base font-mono font-bold text-cyan-400 flex items-center justify-end gap-1">
+                <i class="fa-solid fa-stopwatch text-xs"></i>
+                <span id="latencyText">4.2 ms</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Risk Score Gauge Bar -->
+          <div class="py-6">
+            <div class="flex justify-between items-end mb-2">
+              <span class="text-sm font-semibold text-slate-300">Fraud Risk Probability</span>
+              <span id="scoreText" class="text-3xl font-black font-mono text-emerald-400">0.1842</span>
+            </div>
+            <div class="h-4 w-full bg-slate-950 rounded-full p-1 border border-slate-800 overflow-hidden relative">
+              <div id="scoreBar" class="h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500" style="width: 18.4%;"></div>
+            </div>
+            <div class="flex justify-between text-[11px] text-slate-500 font-mono mt-1">
+              <span>0.00 (Approve < 0.30)</span>
+              <span>0.30 - 0.70 (Review Flag)</span>
+              <span>1.00 (Decline > 0.70)</span>
+            </div>
+          </div>
+
+          <!-- Relational Graph View -->
+          <div class="bg-slate-950/70 border border-slate-800 rounded-xl p-4 mb-4">
+            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center gap-1.5">
+              <i class="fa-solid fa-diagram-project text-indigo-400"></i>
+              1-Hop Graph Relational Neighborhood
+            </div>
+            <div class="grid grid-cols-4 gap-2 text-center text-xs">
+              <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-lg">
+                <i class="fa-solid fa-credit-card text-indigo-400 block mb-1"></i>
+                <span class="text-[10px] text-slate-400 block">CARD NODE</span>
+                <span id="graphCard" class="font-mono text-slate-200 text-[11px]">card_20005</span>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-lg">
+                <i class="fa-solid fa-shop text-amber-400 block mb-1"></i>
+                <span class="text-[10px] text-slate-400 block">MERCHANT</span>
+                <span id="graphMerch" class="font-mono text-slate-200 text-[11px]">merch_W_315</span>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-lg">
+                <i class="fa-solid fa-laptop text-cyan-400 block mb-1"></i>
+                <span class="text-[10px] text-slate-400 block">DEVICE</span>
+                <span id="graphDev" class="font-mono text-slate-200 text-[11px]">dev_desktop_Windows</span>
+              </div>
+              <div class="bg-slate-900 border border-slate-800 p-2.5 rounded-lg">
+                <i class="fa-solid fa-bolt text-rose-400 block mb-1"></i>
+                <span class="text-[10px] text-slate-400 block">5M VELOCITY</span>
+                <span id="graphVel" class="font-mono text-slate-200 text-[11px]">1 tx (burst: 0)</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Reasons Section -->
+          <div>
+            <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-2 flex items-center gap-1.5">
+              <i class="fa-solid fa-brain text-indigo-400"></i>
+              Operational AI Explanations
+            </div>
+            <div id="reasonsList" class="space-y-2">
+              <div class="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl flex items-start gap-3">
+                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">PROTECTIVE</span>
+                <div class="text-xs text-slate-300">Card has established history of 30 verified legitimate transactions with 0 disputes</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Recent Stream Ledger -->
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl">
+          <div class="text-xs font-semibold uppercase tracking-wider text-slate-400 mb-3 flex items-center justify-between">
+            <span><i class="fa-solid fa-list-check mr-1.5 text-indigo-400"></i> Live Evaluated Ledger</span>
+            <span class="text-[11px] font-mono text-slate-500">Auto-Refreshed</span>
+          </div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+              <thead>
+                <tr class="text-slate-500 border-b border-slate-800">
+                  <th class="pb-2">Tx ID</th>
+                  <th class="pb-2">Amount</th>
+                  <th class="pb-2">Card</th>
+                  <th class="pb-2">Score</th>
+                  <th class="pb-2">Decision</th>
+                  <th class="pb-2">Latency</th>
+                </tr>
+              </thead>
+              <tbody id="ledgerBody" class="divide-y divide-slate-800/50 font-mono">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const scenarios = {
+      good: {
+        TransactionID: 5001001,
+        TransactionAmt: 45.00,
+        ProductCD: "W",
+        card1: "20005",
+        addr1: 315,
+        card4: "visa",
+        DeviceType: "desktop",
+        DeviceInfo: "Windows"
+      },
+      flag: {
+        TransactionID: 5001002,
+        TransactionAmt: 380.00,
+        ProductCD: "C",
+        card1: "10002",
+        addr1: 299,
+        card4: "mastercard",
+        DeviceType: "mobile",
+        DeviceInfo: "iOS Device"
+      },
+      bad: {
+        TransactionID: 5001003,
+        TransactionAmt: 999.00,
+        ProductCD: "C",
+        card1: "10001",
+        addr1: 299,
+        card4: "visa",
+        DeviceType: "mobile",
+        DeviceInfo: "iOS Device"
+      }
+    };
+
+    function loadScenario(type) {
+      const data = scenarios[type];
+      document.getElementById("txId").value = data.TransactionID;
+      document.getElementById("txAmt").value = data.TransactionAmt;
+      document.getElementById("productCd").value = data.ProductCD;
+      document.getElementById("card1").value = data.card1;
+      document.getElementById("addr1").value = data.addr1;
+      document.getElementById("card4").value = data.card4;
+      document.getElementById("deviceType").value = data.DeviceType;
+      document.getElementById("deviceInfo").value = data.DeviceInfo;
+      submitScore();
+    }
+
+    async function submitScore() {
+      const btn = document.getElementById("submitBtn");
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Scoring...`;
+      btn.disabled = true;
+
+      const payload = {
+        TransactionID: parseInt(document.getElementById("txId").value),
+        TransactionDT: Math.floor(Date.now() / 1000),
+        TransactionAmt: parseFloat(document.getElementById("txAmt").value),
+        ProductCD: document.getElementById("productCd").value,
+        card1: document.getElementById("card1").value,
+        addr1: parseFloat(document.getElementById("addr1").value) || null,
+        card4: document.getElementById("card4").value,
+        DeviceType: document.getElementById("deviceType").value,
+        DeviceInfo: document.getElementById("deviceInfo").value
+      };
+
+      try {
+        const res = await fetch("/score", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+        updateUI(payload, data);
+        addToLedger(payload, data);
+      } catch (err) {
+        alert("Scoring request failed: " + err);
+      } finally {
+        btn.innerHTML = `<i class="fa-solid fa-bolt"></i> Evaluate Risk with Hybrid GNN`;
+        btn.disabled = false;
+      }
+    }
+
+    function updateUI(payload, res) {
+      const score = res.fraud_score;
+      const decision = res.decision;
+      const latency = res.latency_ms;
+
+      document.getElementById("scoreText").innerText = score.toFixed(4);
+      document.getElementById("latencyText").innerText = latency + " ms";
+      document.getElementById("engineLatency").innerText = latency + " ms";
+
+      const bar = document.getElementById("scoreBar");
+      bar.style.width = Math.min(100, Math.max(5, score * 100)) + "%";
+
+      const badge = document.getElementById("decisionBadge");
+      const badgeText = document.getElementById("decisionText");
+      const resultCard = document.getElementById("resultCard");
+
+      resultCard.classList.remove("glow-approve", "glow-flag", "glow-decline");
+
+      if (decision === "APPROVE") {
+        badge.className = "mt-1 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-lg font-black tracking-wide bg-emerald-500/10 text-emerald-400 border border-emerald-500/30";
+        badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> <span>APPROVE</span>`;
+        bar.className = "h-full bg-gradient-to-r from-emerald-500 to-cyan-500 rounded-full transition-all duration-500";
+        resultCard.classList.add("glow-approve");
+      } else if (decision === "FLAG") {
+        badge.className = "mt-1 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-lg font-black tracking-wide bg-amber-500/10 text-amber-400 border border-amber-500/30";
+        badge.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> <span>FLAG FOR 3DS</span>`;
+        bar.className = "h-full bg-gradient-to-r from-amber-500 to-orange-500 rounded-full transition-all duration-500";
+        resultCard.classList.add("glow-flag");
+      } else {
+        badge.className = "mt-1 inline-flex items-center gap-2 px-4 py-1.5 rounded-xl text-lg font-black tracking-wide bg-rose-500/10 text-rose-400 border border-rose-500/30";
+        badge.innerHTML = `<i class="fa-solid fa-circle-xmark"></i> <span>DECLINE</span>`;
+        bar.className = "h-full bg-gradient-to-r from-rose-500 to-red-600 rounded-full transition-all duration-500";
+        resultCard.classList.add("glow-decline");
+      }
+
+      // Graph node view
+      document.getElementById("graphCard").innerText = "card_" + payload.card1;
+      document.getElementById("graphMerch").innerText = `merch_${payload.ProductCD}_${payload.addr1 || 'null'}`;
+      document.getElementById("graphDev").innerText = `dev_${payload.DeviceType}_${payload.DeviceInfo}`;
+      const isBurst = res.top_reasons.some(r => r.edge_type === 'velocity_cluster');
+      document.getElementById("graphVel").innerText = isBurst ? "BURST DETECTED" : "Normal";
+      document.getElementById("graphVel").className = isBurst ? "font-mono text-rose-400 font-bold text-[11px]" : "font-mono text-slate-200 text-[11px]";
+
+      // Reasons list
+      const reasonsList = document.getElementById("reasonsList");
+      reasonsList.innerHTML = "";
+      res.top_reasons.forEach(r => {
+        const isProt = r.weight < 0;
+        const tagClass = isProt 
+          ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" 
+          : "bg-rose-500/10 text-rose-400 border-rose-500/20";
+        const tagText = isProt ? "PROTECTIVE" : `RISK +${r.weight}`;
+
+        reasonsList.innerHTML += `
+          <div class="bg-slate-950/60 border border-slate-800/80 p-3 rounded-xl flex items-start gap-3">
+            <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold border ${tagClass}">${tagText}</span>
+            <div class="text-xs text-slate-300">
+              <span class="text-slate-500 font-mono mr-1">[${r.edge_type}]</span>
+              ${r.description}
+            </div>
+          </div>
+        `;
+      });
+    }
+
+    function addToLedger(payload, res) {
+      const tbody = document.getElementById("ledgerBody");
+      const tr = document.createElement("tr");
+      tr.className = "hover:bg-slate-800/30 transition text-slate-300";
+      const color = res.decision === 'APPROVE' ? 'text-emerald-400' : (res.decision === 'FLAG' ? 'text-amber-400' : 'text-rose-400');
+      tr.innerHTML = `
+        <td class="py-2 text-slate-400">#${payload.TransactionID}</td>
+        <td class="py-2 text-white font-semibold">$${payload.TransactionAmt.toFixed(2)}</td>
+        <td class="py-2">${payload.card1}</td>
+        <td class="py-2">${res.fraud_score.toFixed(4)}</td>
+        <td class="py-2 font-bold ${color}">${res.decision}</td>
+        <td class="py-2 text-slate-400">${res.latency_ms} ms</td>
+      `;
+      tbody.prepend(tr);
+    }
+
+    // Auto-load scenario 1 upon opening
+    window.onload = () => loadScenario('good');
+  </script>
+</body>
+</html>

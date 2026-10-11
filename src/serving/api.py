@@ -8,9 +8,10 @@ Endpoints:
 
 from contextlib import asynccontextmanager
 import logging
-import time
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
@@ -88,6 +89,15 @@ class ScoreResponse(BaseModel):
     thresholds: Dict[str, float]
     top_reasons: List[ReasonDetail]
     latency_ms: float
+
+
+@app.get("/", response_class=HTMLResponse, tags=["UI"])
+def serve_dashboard():
+    """Interactive visual demo UI for real-time payment fraud intelligence."""
+    html_file = Path(__file__).parent / "dashboard.html"
+    if html_file.exists():
+        return HTMLResponse(content=html_file.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>FraudGraph API Running. Visit <a href='/docs'>/docs</a> for Swagger</h1>")
 
 
 @app.get("/health", tags=["System"])
