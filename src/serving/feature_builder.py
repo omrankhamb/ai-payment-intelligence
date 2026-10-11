@@ -38,7 +38,7 @@ class FeatureBuilder:
         """Construct the 437-dimensional feature vector."""
         # 1. Direct pass-through if full vector provided
         features = payload.get("features")
-        if features is not None and isinstance(features, (list, np.ndarray)):
+        if features is not None and isinstance(features, (list, np.ndarray)) and len(features) >= 100:
             if len(features) == TOTAL_FEATURE_DIM:
                 return np.array(features, dtype=np.float32)
             elif len(features) > TOTAL_FEATURE_DIM:

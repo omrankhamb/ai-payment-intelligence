@@ -9,6 +9,7 @@ Endpoints:
 from contextlib import asynccontextmanager
 import logging
 from pathlib import Path
+import time
 from typing import Any, Dict, List, Optional
 from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse
@@ -72,7 +73,24 @@ class ScoreRequest(BaseModel):
     R_emaildomain: Optional[str] = None
     DeviceType: Optional[str] = None
     DeviceInfo: Optional[str] = None
-    features: Optional[List[float]] = Field(None, description="Optional 437-dim feature vector")
+    features: Optional[List[float]] = None
+
+    model_config = {
+        "json_schema_extra": {
+            "example": {
+                "TransactionID": 3000001,
+                "TransactionDT": 86400,
+                "TransactionAmt": 150.00,
+                "ProductCD": "W",
+                "card1": 13926,
+                "addr1": 315.0,
+                "card4": "visa",
+                "card6": "debit",
+                "DeviceType": "mobile",
+                "DeviceInfo": "iOS Device",
+            }
+        }
+    }
 
 
 class ReasonDetail(BaseModel):
